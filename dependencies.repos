@@ -1,0 +1,25 @@
+repositories:
+  ros_ws/src/livox_ros_driver2:
+    type: git
+    url: https://github.com/Livox-SDK/livox_ros_driver2.git
+    version: 21445540f0d100dc86a7e6df312dd70bbdb4afdf
+  ros_ws/src/px4_msgs:
+    type: git
+    url: https://github.com/PX4/px4_msgs.git
+    version: 86d8239e962f6939e05c3737784f60c02fa884db
+  deps/Livox-SDK2:
+    type: git
+    url: https://github.com/Livox-SDK/Livox-SDK2.git
+    version: c0796f04c143143899c87a773d9f6b7136453c0b
+  deps/Micro-XRCE-DDS-Agent:
+    type: git
+    url: https://github.com/eProsima/Micro-XRCE-DDS-Agent.git
+    version: 73622810d984349b80bbac0ef55fc0b694d62222
+  deps/spdlog:
+    type: git
+    url: https://github.com/gabime/spdlog.git
+    version: eb3220622e73a4889eee355ffa37972b3cac3df5
+  deps/linuxptp:
+    type: git
+    url: https://github.com/richardcochran/linuxptp.git
+    version: 6feb76186ac39eab2fc011053f1cf46bfc94c8e4

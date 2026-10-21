@@ -1,0 +1,30 @@
+Packaging validation — 2026-10-22
+Environment: ROS 2 Jazzy on the existing machine.
+
+Build:
+  colcon build --executor sequential --packages-select fast_lio fastlio_px4_bridge --cmake-args -DCMAKE_BUILD_TYPE=Release
+  MAKEFLAGS=-j2 CMAKE_BUILD_PARALLEL_LEVEL=2
+  Result: 2 packages finished successfully.
+  Existing verified Livox and px4_msgs underlays were used.
+  A fresh installation/rebuild of every pinned external dependency was not repeated.
+  Upstream CMake/PCL/Python/IKFoM warnings remain.
+
+Tests:
+  Targeted colcon tests for fast_lio and fastlio_px4_bridge.
+  Summary: 21 tests, 0 errors, 0 failures, 0 skipped.
+  Includes 16 bridge behavior tests, 3 gravity alignment tests and 2 CTest wrappers.
+  Bridge behavior tests used ROS_DOMAIN_ID=187 and /test/* topics.
+  Tests did not publish to the live flight controller.
+
+Launch:
+  ros2 launch fastlio_px4_bridge fc_imu_lio.launch.py --show-args
+  Result: success.
+  Default output_topic: /lio/vehicle_visual_odometry
+  Default reset_counter: 0
+
+Packaging:
+  Shell syntax checks, YAML/XML parsing and launch Python parsing passed.
+  No full upstream lint pass is claimed.
+  Raw recordings, flight-controller parameter backups, firmware binaries,
+  credentials and generated build artifacts are excluded.
+  Live system validation and remaining limits are documented in validation.md.

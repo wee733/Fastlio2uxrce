@@ -1,0 +1,42 @@
+diff --git a/boards/micoair/h743-v2/src/init.c b/boards/micoair/h743-v2/src/init.c
+index c0e1f977..4df49e2a 100644
+--- a/boards/micoair/h743-v2/src/init.c
++++ b/boards/micoair/h743-v2/src/init.c
+@@ -95,7 +95,7 @@ __EXPORT void board_peripheral_reset(int ms)
+ __EXPORT void board_on_reset(int status)
+ {
+ 	for (int i = 0; i < DIRECT_PWM_OUTPUT_CHANNELS; ++i) {
+-		px4_arch_configgpio(PX4_MAKE_GPIO_INPUT(io_timer_channel_get_as_pwm_input(i)));
++		px4_arch_configgpio(io_timer_channel_get_gpio_output(i));
+ 	}
+ 
+ 	/*
+diff --git a/src/modules/uxrce_dds_client/dds_topics.yaml b/src/modules/uxrce_dds_client/dds_topics.yaml
+index 7cc39d19..1989b78f 100644
+--- a/src/modules/uxrce_dds_client/dds_topics.yaml
++++ b/src/modules/uxrce_dds_client/dds_topics.yaml
+@@ -45,6 +45,7 @@ publications:
+ 
+   - topic: /fmu/out/sensor_combined
+     type: px4_msgs::msg::SensorCombined
++    rate_limit: 200.
+ 
+   - topic: /fmu/out/timesync_status
+     type: px4_msgs::msg::TimesyncStatus
+diff --git a/src/modules/uxrce_dds_client/uxrce_dds_client.cpp b/src/modules/uxrce_dds_client/uxrce_dds_client.cpp
+index d5f2b570..3c070503 100644
+--- a/src/modules/uxrce_dds_client/uxrce_dds_client.cpp
++++ b/src/modules/uxrce_dds_client/uxrce_dds_client.cpp
+@@ -681,7 +681,11 @@ void UxrceddsClient::run()
+ 			process_replies();
+ 
+ 			// time sync session
+-			if (_synchronize_timestamps && hrt_elapsed_time(&last_sync_session) > 1_s) {
++			// Timesync estimates skew per sample, not per second. Keep the runtime
++			// cadence close to the 10 ms initialization loop: switching to 1 Hz
++			// leaves the skew estimate too small on clocks with measurable drift.
++			// MicoAir H743 v2 bench measurement: approximately +1128 ppm.
++			if (_synchronize_timestamps && hrt_elapsed_time(&last_sync_session) > 10_ms) {
+ 
+ 				if (uxr_sync_session(&session, 10) && _timesync.sync_converged()) {
+ 					last_sync_session = hrt_absolute_time();

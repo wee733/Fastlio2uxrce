@@ -1,0 +1,61 @@
+# Calibrated with FC IMU, 2026-10-21: p_IMU_FLU = R_IL * p_LIDAR + t_IL.
+# Mount confirmed by user: approx. 15 deg tilt, LiDAR 9.6 cm above IMU.
+# Same-bag offline FAST-LIO validation passed; flight/EKF validation pending.
+# Retain zero time offset: LI-Init reported lag is not validated as clock offset.
+# Evidence: docs/validation.md
+/**:
+  ros__parameters:
+    feature_extract_enable: false
+    point_filter_num: 3
+    max_iteration: 3
+    filter_size_surf: 0.5
+    filter_size_map: 0.5
+    cube_side_length: 1000.0
+    runtime_pos_log_enable: false
+    map_file_path: ./test.pcd
+    common:
+      lid_topic: /livox/lidar
+      imu_topic: /lio/imu
+      time_sync_en: false
+      time_offset_lidar_to_imu: 0.0
+    preprocess:
+      lidar_type: 1
+      scan_line: 4
+      blind: 0.5
+      timestamp_unit: 3
+      scan_rate: 10
+    mapping:
+      acc_cov: 0.1
+      gyr_cov: 0.1
+      b_acc_cov: 0.0001
+      b_gyr_cov: 0.0001
+      fov_degree: 360.0
+      det_range: 100.0
+      extrinsic_est_en: false
+      extrinsic_T:
+      - 0.043247
+      - -0.013759
+      - 0.095454
+      extrinsic_R:
+      - 0.9657820217277744
+      - 0.02621393268982842
+      - 0.2580269680485856
+      - -0.016018066035964007
+      - 0.9990085072940996
+      - -0.04153822233175647
+      - -0.2588600163560997
+      - 0.03598377532927974
+      - 0.9652443524026296
+      gravity_align: true
+      require_calibrated_extrinsic: true
+      extrinsic_calibrated: true
+    publish:
+      path_en: true
+      effect_map_en: false
+      map_en: true
+      scan_publish_en: true
+      dense_publish_en: false
+      scan_bodyframe_pub_en: true
+    pcd_save:
+      pcd_save_en: false
+      interval: -1

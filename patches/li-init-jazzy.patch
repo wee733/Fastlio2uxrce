@@ -1,0 +1,249 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index b8d5703..4e17938 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -3,16 +3,15 @@ project(lidar_imu_init)
+ 
+ SET(CMAKE_BUILD_TYPE "Release")
+ 
+-ADD_COMPILE_OPTIONS(-std=c++14 )
+-set( CMAKE_CXX_FLAGS "-std=c++14 -O3" ) 
++set(CMAKE_CXX_FLAGS "-O3")
+ 
+ add_definitions(-DROOT_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/\")
+ 
+ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fexceptions" )
+-set(CMAKE_CXX_STANDARD 14)
++set(CMAKE_CXX_STANDARD 17)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+ set(CMAKE_CXX_EXTENSIONS OFF)
+-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -std=c++0x -std=c++14 -fexceptions")
++set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -fexceptions")
+ 
+ message("Current CPU architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+ if(CMAKE_SYSTEM_PROCESSOR MATCHES "(x86)|(X86)|(amd64)|(AMD64)" )
+@@ -61,8 +60,8 @@ find_package(tf2_ros REQUIRED)
+ find_package(tf2_geometry_msgs REQUIRED)
+ find_package(rosidl_default_generators REQUIRED)
+ 
+-find_package(Python3 COMPONENTS Development)
+ set(Python3_EXECUTABLE "/usr/bin/python3")
++find_package(Python3 REQUIRED COMPONENTS Interpreter Development NumPy)
+ find_path(MATPLOTLIB_CPP_INCLUDE_DIRS "matplotlibcpp.h")
+ 
+ if(OPENMP_FOUND)
+@@ -95,6 +94,7 @@ target_include_directories(li_init PRIVATE
+   ${EIGEN3_INCLUDE_DIR}
+   ${PCL_INCLUDE_DIR}
+   ${Python3_INCLUDE_DIRS}
++  ${Python3_NumPy_INCLUDE_DIRS}
+   ${CERES_INCLUDE_DIRS}
+   )
+ 
+diff --git a/include/IMU_Processing.hpp b/include/IMU_Processing.hpp
+index 3a5e052..80b6a69 100644
+--- a/include/IMU_Processing.hpp
++++ b/include/IMU_Processing.hpp
+@@ -82,7 +82,7 @@ class ImuProcess
+   V3D angvel_last;
+   V3D acc_s_last;
+   double last_lidar_end_time_;
+-  double time_last_scan;
++  double time_last_scan = 0.0;
+   int    init_iter_num = 1;
+   bool   b_first_frame_ = true;
+   bool   imu_need_init_ = true;
+@@ -221,8 +221,9 @@ void ImuProcess::Forward_propagation_without_imu(const MeasureGroup &meas, State
+         b_first_frame_ = false;
+     } else {
+         dt = pcl_beg_time - time_last_scan;
+-        time_last_scan = pcl_beg_time;
+     }
++    // Seed the previous scan time on the first call as well.
++    time_last_scan = pcl_beg_time;
+ 
+     /* covariance propagation */
+     F_x.setIdentity();
+diff --git a/include/LI_init/LI_init.cpp b/include/LI_init/LI_init.cpp
+index 1dd3527..2ae8483 100644
+--- a/include/LI_init/LI_init.cpp
++++ b/include/LI_init/LI_init.cpp
+@@ -322,7 +322,7 @@ void LI_Init::solve_Rotation_only() {
+     R_LI_quat[2] = 0;
+     R_LI_quat[3] = 0;
+ 
+-    ceres::LocalParameterization *quatParam = new ceres::QuaternionParameterization();
++    ceres::Manifold *quatParam = new ceres::QuaternionManifold();
+     ceres::Problem problem_rot;
+     problem_rot.AddParameterBlock(R_LI_quat, 4, quatParam);
+ 
+@@ -358,7 +358,7 @@ void LI_Init::solve_Rot_bias_gyro(double &timediff_imu_wrt_lidar) {
+ 
+     double time_lag2 = 0; //Second time lag (IMU wtr Lidar)
+ 
+-    ceres::LocalParameterization *quatParam = new ceres::QuaternionParameterization();
++    ceres::Manifold *quatParam = new ceres::QuaternionManifold();
+     ceres::Problem problem_ang_vel;
+ 
+     problem_ang_vel.AddParameterBlock(R_LI_quat, 4, quatParam);
+@@ -421,7 +421,7 @@ void LI_Init::solve_trans_biasacc_grav() {
+     Trans_IL[1] = 0.0;
+     Trans_IL[2] = 0.0;
+ 
+-    ceres::LocalParameterization *quatParam = new ceres::QuaternionParameterization();
++    ceres::Manifold *quatParam = new ceres::QuaternionManifold();
+     ceres::Problem problem_acc;
+ 
+     problem_acc.AddParameterBlock(R_GL0_quat, 4, quatParam);
+@@ -506,6 +506,12 @@ void LI_Init::normalize_acc(deque<CalibState> &signal_in) {
+ 
+ bool LI_Init::data_sufficiency_assess(MatrixXd &Jacobian_rot, int &frame_num, V3D &lidar_omg, int &orig_odom_freq,
+                                       int &cut_frame_num) {
++    // A long live capture can exceed the initial 10,000-frame allocation.
++    if (3 * (frame_num + 1) > Jacobian_rot.rows()) {
++        const auto old_rows = Jacobian_rot.rows();
++        Jacobian_rot.conservativeResize(old_rows * 2, 3);
++        Jacobian_rot.bottomRows(old_rows).setZero();
++    }
+     //Calculation of Rotation Jacobian
+     M3D lidar_omg_skew;
+     lidar_omg_skew << SKEW_SYM_MATRX(lidar_omg);
+diff --git a/launch/livox_mid360.launch.py b/launch/livox_mid360.launch.py
+index c208c5a..d5839d5 100644
+--- a/launch/livox_mid360.launch.py
++++ b/launch/livox_mid360.launch.py
+@@ -6,7 +6,7 @@ from launch_ros.actions import Node
+ def generate_launch_description():
+     ld =LaunchDescription()
+     node = Node(
+-        package= "lidar_imu_init2",
++        package= "lidar_imu_init",
+         name= "laser_mapping",
+         executable="li_init",
+         output = "screen",
+@@ -15,7 +15,7 @@ def generate_launch_description():
+             "max_iteration":5,
+             "cube_side_length": 2000.0
+         },
+-        os.path.join(get_package_share_directory("lidar_imu_init2"),"config","mid360.yaml")
++        os.path.join(get_package_share_directory("lidar_imu_init"),"config","mid360.yaml")
+         ]
+     )
+ 
+diff --git a/package.xml b/package.xml
+index 27d58ed..14d4f42 100644
+--- a/package.xml
++++ b/package.xml
+@@ -10,7 +10,12 @@
+   <buildtool_depend>rosidl_default_generators</buildtool_depend>
+ 
+   <depend>rclcpp</depend>
+-  <depend>rospy</depend>
++  <depend>rclcpp_components</depend>
++  <depend>ament_index_cpp</depend>
++  <depend>pcl_conversions</depend>
++  <depend>eigen</depend>
++  <depend>libceres-dev</depend>
++  <depend>python3-dev</depend>
+   <depend>sensor_msgs</depend>
+   <depend>geometry_msgs</depend>
+   <depend>std_msgs</depend>
+diff --git a/src/laserMapping.cpp b/src/laserMapping.cpp
+index 2c6e761..5bf4dd2 100644
+--- a/src/laserMapping.cpp
++++ b/src/laserMapping.cpp
+@@ -611,7 +611,7 @@ void publish_frame_world(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::Share
+         else
+             pcl::toROSMsg(*laserCloudWorld, laserCloudmsg);
+ 
+-        laserCloudmsg.header.stamp = rclcpp::Time(lidar_end_time);
++        laserCloudmsg.header.stamp = get_ros_time(lidar_end_time);
+         laserCloudmsg.header.frame_id = "camera_init";
+         pubLaserCloudFullRes->publish(laserCloudmsg);
+         publish_count -= PUBFRAME_PERIOD;
+@@ -650,7 +650,7 @@ void publish_frame_body(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::Shared
+     PointCloudXYZI::Ptr laserCloudFullRes(feats_undistort);
+     sensor_msgs::msg::PointCloud2 laserCloudmsg;
+     pcl::toROSMsg(*feats_undistort, laserCloudmsg);
+-    laserCloudmsg.header.stamp = rclcpp::Time(lidar_end_time);
++    laserCloudmsg.header.stamp = get_ros_time(lidar_end_time);
+     laserCloudmsg.header.frame_id = "camera_init";
+     pubLaserCloudFullRes_body->publish(laserCloudmsg);
+ }
+@@ -665,7 +665,7 @@ void publish_effect_world(rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::Shar
+     }
+     sensor_msgs::msg::PointCloud2 laserCloudFullRes3;
+     pcl::toROSMsg(*laserCloudWorld, laserCloudFullRes3);
+-    laserCloudFullRes3.header.stamp = rclcpp::Time(lidar_end_time);
++    laserCloudFullRes3.header.stamp = get_ros_time(lidar_end_time);
+     laserCloudFullRes3.header.frame_id = "camera_init";
+     pubLaserCloudEffect->publish(laserCloudFullRes3);
+ }
+@@ -674,7 +674,7 @@ void publish_map(const rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedP
+ {
+     sensor_msgs::msg::PointCloud2 laserCloudMap;
+     pcl::toROSMsg(*featsFromMap, laserCloudMap);
+-    laserCloudMap.header.stamp = rclcpp::Time(lidar_end_time);
++    laserCloudMap.header.stamp = get_ros_time(lidar_end_time);
+     laserCloudMap.header.frame_id = "camera_init";
+     pubLaserCloudMap->publish(laserCloudMap);
+ }
+@@ -878,7 +878,7 @@ public:
+         cout << "lidar_type: " << lidar_type << endl;
+         cout << "LiDAR-only odometry starts." << endl;
+ 
+-        path.header.stamp = rclcpp::Time(lidar_end_time);
++        path.header.stamp = get_ros_time(lidar_end_time);
+         path.header.frame_id = "camera_init";
+ 
+         _featsArray.reset(new PointCloudXYZI());
+@@ -925,7 +925,7 @@ public:
+             sub_pcl_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(lid_topic, 20, standard_pcl_cbk);
+         }
+ 
+-        sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, 10, imu_cbk);
++        sub_imu_ = this->create_subscription<sensor_msgs::msg::Imu>(imu_topic, rclcpp::QoS(300).reliable(), imu_cbk);
+ 
+         pubIMU_sync = this->create_publisher<sensor_msgs::msg::Imu>("/li_init/imu/async", 20);
+         pubLaserCloudFullRes = this->create_publisher<sensor_msgs::msg::PointCloud2>("/cloud_registered", 20);
+@@ -945,7 +945,9 @@ public:
+     {
+         fout_out.close();
+         fout_result.close();
+-        fclose(fp);
++        if (fp != nullptr) {
++            fclose(fp);
++        }
+     }
+ 
+ private:
+@@ -1297,9 +1299,9 @@ void LaserMappingNode::timer_callback()
+                 print_refine_result();
+                 fout_result << "Refinement result:" << endl;
+                 fileout_calib_result();
+-                string path = ament_index_cpp::get_package_share_directory("lidar_imu_init");
++                string path = ROOT_DIR;
+                 cout << "path ---------------------- " << path << endl;
+-                path += "/result/Initialization_result.txt";
++                path += "result/Initialization_result.txt";
+                 cout << endl
+                         << "Initialization and refinement result is written to " << endl
+                         << BOLDGREEN << path << RESET << endl;
+@@ -1337,7 +1339,7 @@ void LaserMappingNode::timer_callback()
+                 time_lag_IMU_wtr_lidar = Init_LI->get_total_time_lag(); // Compensate IMU's time in the buffer
+                 for (int i = 0; i < imu_buffer.size(); i++)
+                 {
+-                    imu_buffer[i]->header.stamp = rclcpp::Time(rclcpp::Time(imu_buffer[i]->header.stamp).seconds() - time_lag_IMU_wtr_lidar);
++                    imu_buffer[i]->header.stamp = get_ros_time(get_time_sec(imu_buffer[i]->header.stamp) - time_lag_IMU_wtr_lidar);
+                 }
+ 
+                 p_imu->imu_en = imu_en;
+@@ -1359,7 +1361,7 @@ void LaserMappingNode::timer_callback()
+ int main(int argc, char **argv)
+ {
+     rclcpp::init(argc, argv);
+-    signal(SIGINT, SigHandle);
++    // Keep rclcpp signal handling so SIGINT shuts down the executor.
+ 
+     rclcpp::spin(std::make_shared<LaserMappingNode>());
+ 

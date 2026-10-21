@@ -1,0 +1,16 @@
+fastlio_to_px4_visual_odometry:
+  ros__parameters:
+    input_odom_topic: /Odometry
+    output_topic: /lio/vehicle_visual_odometry
+    # Set true only with gravity-aligned camera_init and FC-IMU-FLU body.
+    input_world_is_level: false
+    publish_orientation: true
+    publish_velocity_from_delta: false
+    max_sample_age: 0.3
+    max_future_time: 0.02
+    reset_counter: 0
+    # Initial tuning values, not measured covariance or a flight qualification.
+    pos_var_xy: 0.04
+    pos_var_z: 0.09
+    rot_var: 0.09
+    vel_var: 0.25
