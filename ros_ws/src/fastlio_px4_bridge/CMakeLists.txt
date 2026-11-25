@@ -13,10 +13,11 @@ find_package(rclcpp REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(px4_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
 
 add_executable(fastlio_to_px4_visual_odometry src/fastlio_to_px4_visual_odometry.cpp)
 
-ament_target_dependencies(fastlio_to_px4_visual_odometry rclcpp nav_msgs px4_msgs)
+ament_target_dependencies(fastlio_to_px4_visual_odometry rclcpp nav_msgs px4_msgs sensor_msgs diagnostic_msgs)
 add_executable(px4_imu_to_ros src/px4_imu_to_ros.cpp)
 ament_target_dependencies(px4_imu_to_ros rclcpp sensor_msgs px4_msgs)
 
@@ -27,8 +28,13 @@ install(
 install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
+  add_executable(test_input_gate test/test_input_gate.cpp)
+  target_include_directories(test_input_gate PRIVATE src)
+  target_compile_options(test_input_gate PRIVATE -UNDEBUG)
+  add_test(NAME input_gate COMMAND test_input_gate)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(bridge_behavior test/test_bridge_behavior.py TIMEOUT 90)
+  ament_add_pytest_test(input_guard_behavior test/test_input_guard_behavior.py TIMEOUT 30)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files

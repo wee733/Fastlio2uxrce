@@ -2,8 +2,10 @@ fastlio_to_px4_visual_odometry:
   ros__parameters:
     input_odom_topic: /Odometry
     output_topic: /lio/vehicle_visual_odometry
+    status_topic: /fast_lio/bridge_status
     # Set true only with gravity-aligned camera_init and FC-IMU-FLU body.
     input_world_is_level: false
+    require_fresh_imu: true
     publish_orientation: true
     publish_velocity_from_delta: false
     max_sample_age: 0.3

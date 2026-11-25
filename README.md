@@ -91,6 +91,10 @@ ros2 launch fastlio_px4_bridge fc_imu_lio.launch.py \
 
 LIO 重启会改变原点；每次重启需递增 `reset_counter`（uint8），不能一直使用 1。没有自动重置检测，也没有自动解锁、飞行控制或开机自启。
 
+桥接健康状态通过 ROS 参数 `status_topic` 指定，默认发布到 `/fast_lio/bridge_status`，消息类型为 `diagnostic_msgs/msg/DiagnosticArray`。AivudaOS 根据应用配置生成两个 ROS 参数文件，使用 `fastlio_params` 和 `bridge_params` launch 参数传入。`imu_topic` 同步设置转换后的 IMU 话题，`input_world_is_level` 与 FAST-LIO 的重力对齐设置匹配。应用内默认输出到飞控，直接启动此 launch 时默认输出到预览话题。
+
+在此机上直接运行 ROS 预览时，传入 `transport_mode:=localhost_udp` 可与 AivudaOS 应用一样，通过本机环回 UDP 接收雷达和飞控数据。直接启动的默认值为 `inherit`，使用调用环境的 DDS 设置。环回配置为接收点云申请 4 MiB 套接字缓冲，需要 `net.core.rmem_max >= 4194304`。
+
 ## 外参和 PX4 参数
 
 `ros_ws/src/fast_lio/config/mid360s_fc_imu.yaml` **属于这台飞机**。定义 `p_IMU_FLU = R_IL * p_LIDAR + t_IL`，矩阵按行、平移单位米。复算平移约 `[0.043247, -0.013759, 0.095454]`，主要倾角约 15°。换装或其他飞机应先将 `mapping.extrinsic_calibrated=false` 并重新标定。

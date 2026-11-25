@@ -1,4 +1,9 @@
 #include <cmath>
+#include <chrono>
+#include <memory>
+#include <sensor_msgs/msg/imu.hpp>
+#include <diagnostic_msgs/msg/diagnostic_array.hpp>
+#include "input_gate.hpp"
 #include <array>
 #include <limits>
 #include <string>
@@ -19,6 +24,7 @@ public:
   {
     declare_parameter<std::string>("input_odom_topic", "/Odometry");
     declare_parameter<std::string>("output_topic", "/lio/vehicle_visual_odometry");
+    const auto status_topic = declare_parameter<std::string>("status_topic", "/fast_lio/bridge_status");
     declare_parameter<bool>("publish_velocity_from_delta", false);
     declare_parameter<bool>("publish_orientation", true);
     declare_parameter<double>("max_sample_age", 0.3);
@@ -57,6 +63,24 @@ public:
       throw std::invalid_argument("Time limits and variances must be positive");
     }
 
+    require_inputs_ = declare_parameter<bool>("require_fresh_imu", false);
+    if (require_inputs_) {
+      gate_ = std::make_unique<InputGate>(steady_now(), 2.0, 0.1, max_sample_age_, 30.0);
+      imu_sub_ = create_subscription<sensor_msgs::msg::Imu>(
+        "/lio/imu", rclcpp::SensorDataQoS(), [this](sensor_msgs::msg::Imu::ConstSharedPtr imu) {
+          const double age = (get_clock()->now().nanoseconds() -
+            rclcpp::Time(imu->header.stamp).nanoseconds()) * 1e-9;
+          last_imu_age_ = age;
+          if (age >= -max_future_time_ && age <= 0.1) {
+            ++imu_count_;
+            gate_->imu(steady_now());
+          }
+        });
+      diagnostic_pub_ = create_publisher<diagnostic_msgs::msg::DiagnosticArray>(
+        status_topic, 10);
+      health_timer_ = create_wall_timer(std::chrono::milliseconds(50), [this]() { health(); });
+    }
+
     auto odom_qos = rclcpp::QoS(rclcpp::KeepLast(20)).reliable();
     auto px4_qos = rclcpp::QoS(rclcpp::KeepLast(10)).best_effort();
 
@@ -79,7 +103,57 @@ public:
             "Frame conversion: FAST-LIO FLU/camera_init -> PX4 FRD local frame");
   }
 
+  bool failed() const { return gate_ && gate_->failed(); }
+
 private:
+  static double steady_now() {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  }
+  void health() {
+    const double now = steady_now();
+    const bool ready = gate_->poll(now);
+    if (now - last_report_ < 1.0 && !gate_->failed()) { return; }
+    diagnostic_msgs::msg::DiagnosticStatus status;
+    status.name = "FAST-LIO 数据健康";
+    status.hardware_id = "fastlio_px4_bridge";
+    status.level = gate_->failed() ? 2 : (ready ? 0 : 1);
+    status.message = gate_->failed() ? gate_->reason() :
+      (ready ? "Ready: fresh IMU and odometry" : "Warming up; PX4 output blocked");
+    auto value = [&status](const char * key, double x) {
+      diagnostic_msgs::msg::KeyValue kv; kv.key = key; kv.value = std::to_string(x);
+      status.values.push_back(kv);
+    };
+    if (last_report_ > 0) {
+      value("imu_hz", (imu_count_ - previous_imu_) / (now - last_report_));
+      value("published_hz", (published_ - previous_published_) / (now - last_report_));
+    }
+    value("odom_age_ms", last_age_ * 1000);
+    value("imu_age_ms", last_imu_age_ * 1000);
+    value("since_fresh_imu_ms", gate_->since_imu(now) * 1000);
+    value("since_fresh_odom_ms", gate_->since_odom(now) * 1000);
+    value("odom_received", odom_count_);
+    value("odom_published", published_);
+    value("odom_rejected_or_warming", odom_count_ - published_);
+    diagnostic_msgs::msg::DiagnosticArray array;
+    array.header.stamp = get_clock()->now(); array.status.push_back(status);
+    diagnostic_pub_->publish(array);
+    previous_imu_ = imu_count_; previous_published_ = published_; last_report_ = now;
+    if (gate_->failed()) {
+      RCLCPP_ERROR(get_logger(),
+        "%s (time since last fresh input at failure: IMU %.1f ms, odometry %.1f ms)",
+        status.message.c_str(), gate_->since_imu(now) * 1000, gate_->since_odom(now) * 1000);
+      rclcpp::shutdown(); // launch shuts down the entire estimator, discarding old queues.
+    }
+  }
+  bool require_inputs_{false};
+  std::unique_ptr<InputGate> gate_;
+  uint64_t imu_count_{0}, odom_count_{0}, published_{0}, previous_imu_{0}, previous_published_{0};
+  double last_age_{std::numeric_limits<double>::quiet_NaN()};
+  double last_imu_age_{std::numeric_limits<double>::quiet_NaN()};
+  double last_report_{0};
+  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
+  rclcpp::Publisher<diagnostic_msgs::msg::DiagnosticArray>::SharedPtr diagnostic_pub_;
+  rclcpp::TimerBase::SharedPtr health_timer_;
   struct QuatXYZW
   {
     double x;
@@ -218,6 +292,8 @@ private:
       odom->header.stamp.nanosec / 1000;
     const auto now_us = nowRosTimeUs();
     const double age = (static_cast<int64_t>(now_us) - sample_us) * 1e-6;
+    ++odom_count_;
+    last_age_ = age;
     if (sample_us <= 0 || sample_us <= last_sample_us_ ||
       age > max_sample_age_ || age < -max_future_time_)
     {
@@ -256,6 +332,11 @@ private:
     const double qnorm = std::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
     if (std::abs(qnorm - 1.0) > 0.05) {
       return;
+    }
+    if (gate_) {
+      const double steady = steady_now();
+      gate_->odom(steady);
+      if (!gate_->poll(steady)) { return; }
     }
     px4_msgs::msg::VehicleOdometry msg{};
 
@@ -331,6 +412,7 @@ private:
     msg.quality = 0;      // Unknown: FAST-LIO does not provide a calibrated quality score.
 
     visual_odom_pub_->publish(msg);
+    ++published_;
 
     prev_stamp_ = rclcpp::Time(odom->header.stamp);
     prev_pos_frd_ = pos_frd;
@@ -349,5 +431,5 @@ int main(int argc, char *argv[])
 
   rclcpp::shutdown();
 
-  return 0;
+  return node->failed() ? 2 : 0;
 }

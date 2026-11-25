@@ -13,6 +13,7 @@
   <depend>nav_msgs</depend>
   <depend>px4_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>diagnostic_msgs</depend>
   <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>rclpy</test_depend>
   <exec_depend>ament_index_python</exec_depend>

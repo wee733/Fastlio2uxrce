@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -39,6 +40,20 @@ private:
   {
     const auto now_us = get_clock()->now().nanoseconds() / 1000;
     const double age = (now_us - static_cast<int64_t>(msg->timestamp)) * 1e-6;
+    const auto arrival = std::chrono::steady_clock::now();
+    if (received_) {
+      const double gap = std::chrono::duration<double>(arrival - last_arrival_).count();
+      if (gap > max_age_) {
+        const double stamp_delta = (static_cast<int64_t>(msg->timestamp) -
+          static_cast<int64_t>(last_received_stamp_)) * 1e-6;
+        RCLCPP_WARN(get_logger(),
+          "SensorCombined callback gap %.1f ms, source stamp delta %.1f ms, sample age %.1f ms",
+          gap * 1000, stamp_delta * 1000, age * 1000);
+      }
+    }
+    received_ = true;
+    last_arrival_ = arrival;
+    last_received_stamp_ = msg->timestamp;
     if (msg->timestamp == 0 || msg->timestamp <= last_stamp_ ||
       age > max_age_ || age < -max_future_)
     {
@@ -82,6 +97,9 @@ private:
   double max_age_;
   double max_future_;
   int max_skew_us_;
+  std::chrono::steady_clock::time_point last_arrival_;
+  uint64_t last_received_stamp_{0};
+  bool received_{false};
   uint64_t last_stamp_{0};
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr pub_;
   rclcpp::Subscription<px4_msgs::msg::SensorCombined>::SharedPtr sub_;
