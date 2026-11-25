@@ -1,0 +1,283 @@
+type: object
+additionalProperties: false
+required:
+- ros
+- fastlio
+- workspaces
+- state
+- common
+- preprocess
+- mapping
+- publish
+- px4_bridge
+properties:
+  ros:
+    type: object
+    additionalProperties: false
+    required:
+    - setup_script
+    properties:
+      setup_script:
+        type: string
+        minLength: 1
+        description: Absolute path to the ROS 2 setup.bash file.
+        need_restart: true
+  workspaces:
+    type: object
+    additionalProperties: false
+    required:
+    - px4_msgs_setup
+    - livox_setup
+    - fastlio_setup
+    properties:
+      px4_msgs_setup:
+        type: string
+        description: Setup file for px4_msgs matching the PX4 firmware. Leave blank
+          if supplied by another workspace.
+        need_restart: true
+      livox_setup:
+        type: string
+        description: Setup file for Livox ROS 2 messages. Leave blank if supplied
+          by another workspace.
+        need_restart: true
+      fastlio_setup:
+        type: string
+        description: Optional absolute path to an alternative compatible FAST-LIO
+          workspace setup file. Blank uses the packaged ROS 2 workspace.
+        need_restart: true
+  state:
+    type: object
+    additionalProperties: false
+    required:
+    - counter_directory
+    properties:
+      counter_directory:
+        type: string
+        description: Optional absolute path to the persistent PX4 reset counter directory.
+          Blank uses reset_counter under the app runtime data directory.
+        need_restart: true
+  fastlio:
+    type: object
+    additionalProperties: false
+    required:
+    - ros_domain_id
+    properties:
+      transport_mode:
+        type: string
+        enum: [localhost_udp, inherit]
+        default: localhost_udp
+        description: Use buffered Fast DDS loopback UDP for onboard sensors, or inherit the ROS middleware and discovery environment.
+        need_restart: true
+      ros_domain_id:
+        type: integer
+        minimum: -1
+        maximum: 232
+        default: -1
+        description: ROS_DOMAIN_ID shared by the LiDAR and PX4 data sources (-1 inherits
+          sys.ros2_default_domain_id).
+        need_restart: true
+  common:
+    type: object
+    additionalProperties: false
+    properties:
+      lid_topic:
+        type: string
+        need_restart: true
+        pattern: ^/([A-Za-z_][A-Za-z0-9_]*)(/[A-Za-z_][A-Za-z0-9_]*)*$
+      imu_topic:
+        type: string
+        need_restart: true
+        pattern: ^/([A-Za-z_][A-Za-z0-9_]*)(/[A-Za-z_][A-Za-z0-9_]*)*$
+      time_sync_en:
+        type: boolean
+        need_restart: true
+      time_offset_lidar_to_imu:
+        type: number
+        need_restart: true
+        description: LiDAR-to-IMU time offset (s).
+    required:
+    - lid_topic
+    - imu_topic
+    - time_sync_en
+    - time_offset_lidar_to_imu
+  preprocess:
+    type: object
+    additionalProperties: false
+    properties:
+      blind:
+        type: number
+        need_restart: true
+        description: Minimum accepted point range (m).
+        minimum: 0
+      point_filter_num:
+        type: integer
+        need_restart: true
+        description: Keep every Nth eligible LiDAR point.
+        minimum: 1
+      scan_line:
+        type: integer
+        need_restart: true
+        description: Number of LiDAR scan lines.
+        minimum: 1
+        maximum: 128
+      scan_rate:
+        type: integer
+        need_restart: true
+        description: Nominal LiDAR scan rate (Hz).
+        minimum: 1
+    required:
+    - blind
+    - point_filter_num
+    - scan_line
+    - scan_rate
+  mapping:
+    type: object
+    additionalProperties: false
+    properties:
+      filter_size_surf:
+        type: number
+        need_restart: true
+        description: Surface voxel size (m).
+        exclusiveMinimum: 0
+      filter_size_map:
+        type: number
+        need_restart: true
+        description: Map voxel size (m).
+        exclusiveMinimum: 0
+      max_iteration:
+        type: integer
+        need_restart: true
+        description: Maximum filter iterations per scan.
+        minimum: 1
+      det_range:
+        type: number
+        need_restart: true
+        description: Detection range (m).
+        exclusiveMinimum: 0
+      fov_degree:
+        type: number
+        need_restart: true
+        description: Horizontal field of view (degrees).
+        exclusiveMinimum: 0
+        maximum: 360
+      acc_cov:
+        type: number
+        need_restart: true
+        exclusiveMinimum: 0
+      gyr_cov:
+        type: number
+        need_restart: true
+        exclusiveMinimum: 0
+      b_acc_cov:
+        type: number
+        need_restart: true
+        exclusiveMinimum: 0
+      b_gyr_cov:
+        type: number
+        need_restart: true
+        exclusiveMinimum: 0
+      extrinsic_est_en:
+        type: boolean
+        need_restart: true
+      extrinsic_T:
+        type: array
+        need_restart: true
+        description: LiDAR-to-IMU translation in metres.
+        items:
+          type: number
+        minItems: 3
+        maxItems: 3
+      extrinsic_R:
+        type: array
+        need_restart: true
+        description: Row-major LiDAR-to-IMU rotation matrix.
+        items:
+          type: number
+        minItems: 9
+        maxItems: 9
+      gravity_align:
+        type: boolean
+        need_restart: true
+        description: Align world with gravity. The PX4 bridge withholds odometry when
+          false.
+    required:
+    - filter_size_surf
+    - filter_size_map
+    - max_iteration
+    - det_range
+    - fov_degree
+    - acc_cov
+    - gyr_cov
+    - b_acc_cov
+    - b_gyr_cov
+    - extrinsic_est_en
+    - extrinsic_T
+    - extrinsic_R
+    - gravity_align
+  publish:
+    type: object
+    additionalProperties: false
+    properties:
+      dense_publish_en:
+        type: boolean
+        need_restart: true
+      scan_publish_en:
+        type: boolean
+        need_restart: true
+      map_en:
+        type: boolean
+        need_restart: true
+      path_en:
+        type: boolean
+        need_restart: true
+      scan_bodyframe_pub_en:
+        type: boolean
+        need_restart: true
+    required:
+    - dense_publish_en
+    - scan_publish_en
+    - map_en
+    - path_en
+    - scan_bodyframe_pub_en
+  px4_bridge:
+    type: object
+    additionalProperties: false
+    properties:
+      output_topic:
+        type: string
+        need_restart: true
+        pattern: ^/([A-Za-z_][A-Za-z0-9_]*)(/[A-Za-z_][A-Za-z0-9_]*)*$
+      status_topic:
+        type: string
+        need_restart: true
+        pattern: ^/([A-Za-z_][A-Za-z0-9_]*)(/[A-Za-z_][A-Za-z0-9_]*)*$
+      pos_var_xy:
+        type: number
+        need_restart: true
+        exclusiveMinimum: 0
+      pos_var_z:
+        type: number
+        need_restart: true
+        exclusiveMinimum: 0
+      rot_var:
+        type: number
+        need_restart: true
+        exclusiveMinimum: 0
+      vel_var:
+        type: number
+        need_restart: true
+        exclusiveMinimum: 0
+      max_sample_age:
+        type: number
+        need_restart: true
+        description: Maximum odometry sample age (s).
+        exclusiveMinimum: 0
+        maximum: 0.3
+    required:
+    - output_topic
+    - status_topic
+    - pos_var_xy
+    - pos_var_z
+    - rot_var
+    - vel_var
+    - max_sample_age

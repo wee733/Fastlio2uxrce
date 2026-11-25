@@ -1,0 +1,12 @@
+app_id: app_fast_lio_2026052103_affd
+name: FAST-LIO
+description: Start FAST-LIO and send guarded visual odometry to PX4 over uXRCE-DDS.
+version: ros2jazzy-uxrce-1.1.2
+run:
+  entrypoint: start.sh
+  args: []
+icon: icon.png
+pre_install: scripts/pre_install.sh
+default_config_path: config/default_config.yaml
+config_schema_path: config/config_schema.yaml
+default_config: {}

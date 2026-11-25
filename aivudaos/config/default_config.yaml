@@ -1,0 +1,61 @@
+ros:
+  setup_script: /opt/ros/jazzy/setup.bash
+workspaces:
+  px4_msgs_setup: /home/nvidia/ros2_ws/install/local_setup.bash
+  livox_setup: ''
+  fastlio_setup: ''
+state:
+  counter_directory: ''
+fastlio:
+  transport_mode: localhost_udp
+  ros_domain_id: -1
+common:
+  lid_topic: /livox/lidar
+  imu_topic: /lio/imu
+  time_sync_en: false
+  time_offset_lidar_to_imu: 0.0
+preprocess:
+  blind: 0.5
+  point_filter_num: 2
+  scan_line: 4
+  scan_rate: 10
+mapping:
+  filter_size_surf: 0.15
+  filter_size_map: 0.2
+  max_iteration: 4
+  det_range: 100.0
+  fov_degree: 360.0
+  acc_cov: 0.1
+  gyr_cov: 0.1
+  b_acc_cov: 0.0001
+  b_gyr_cov: 0.0001
+  extrinsic_est_en: false
+  extrinsic_T:
+  - 0.043247
+  - -0.013759
+  - 0.095454
+  extrinsic_R:
+  - 0.9657820217277744
+  - 0.02621393268982842
+  - 0.2580269680485856
+  - -0.016018066035964007
+  - 0.9990085072940996
+  - -0.04153822233175647
+  - -0.2588600163560997
+  - 0.03598377532927974
+  - 0.9652443524026296
+  gravity_align: true
+publish:
+  dense_publish_en: true
+  scan_publish_en: true
+  map_en: true
+  path_en: true
+  scan_bodyframe_pub_en: true
+px4_bridge:
+  output_topic: /fmu/in/vehicle_visual_odometry
+  status_topic: /fast_lio/bridge_status
+  pos_var_xy: 0.04
+  pos_var_z: 0.09
+  rot_var: 0.09
+  vel_var: 0.25
+  max_sample_age: 0.3
